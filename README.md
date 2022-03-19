@@ -46,10 +46,12 @@ bool prefix(client::message& msg)
 void on_msg(client::message msg)
 {
 	if (prefix(msg) == false) return;
+	// Example, typing !ping in any chat will call this function \/
 	if (prefix(msg) == true && msg.param[0] == "ping") {
 		msg.respond(&msg, "pong");
 		std::cout << "pinged!" << std::endl;
 	}
+	// typing !pong in chat will call this functino \/
 	if (prefix(msg) == true && msg.param[0] == "pong") {
 		msg.respond(&msg, "ping");
 		std::cout << "ponged!" << std::endl;
