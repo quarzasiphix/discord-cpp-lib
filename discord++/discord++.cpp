@@ -58,18 +58,10 @@ namespace Discord
         }
     }
 
-    void discord::on_fail(clientpp* c, websocketpp::connection_hdl hdl, discord* _disc) {
-        this->ConClose = true;
-        this->connected = false;
-        c->stop();
-        on_invalid(_disc);
-    }
-
     void discord::on_close(clientpp* c, websocketpp::connection_hdl hdl, discord* _disc) {
-        this->ConClose = true;
-        this->connected = false;
+        _disc->ConClose = true;
+        _disc->connected = false;
         std::cout << "closed connection" << std::endl;
-        on_invalid(_disc);
     }
 
     void discord::on_message(clientpp* c, websocketpp::connection_hdl hdl, message_ptr msg) {
@@ -83,10 +75,8 @@ namespace Discord
                 cli.discriminator = t["d"]["user"]["discriminator"].get<std::string>();
                 cli.username = t["d"]["user"]["username"].get<std::string>();
                 if (!t["d"]["guild_id"].is_null())
-                    for (int i = 0; i < t["d"]["guilds"].size(); i++)
-                    {
-                        cli.guilds.push_back(t["d"]["guilds"][i]["id"].get<std::string>());
-                    }
+                for (int i = 0; i < t["d"]["guilds"].size(); i++)
+                    cli.guilds.push_back(t["d"]["guilds"][i]["id"].get<std::string>());
                 cli.initialised = true;
                 if (on_login) on_login(cli);
             }
@@ -105,81 +95,75 @@ namespace Discord
         }
     }
 
+    void (*on_invalid)(discord* _disc);
+    void (*on_msg)(client::message msg);
+    void (*on_login)(client client);
+
     void discord::on_open(clientpp* c, websocketpp::connection_hdl hdl) {
-        if (bot)
-        {
-            nlohmann::json t;
-            t["op"] = 2;
-            t["d"]["token"] = token;
-            t["d"]["intents"] = 513;
-            t["d"]["properties"]["$os"] = "linux";
-            t["d"]["properties"]["$browser"] = "discordpp";
-            t["d"]["properties"]["$device"] = "discordpp";
-            c->send(hdl, t.dump() , websocketpp::frame::opcode::text);
-        }
-        else c->send(hdl, "{\"op\":2,\"d\":{\"token\":\"" + std::string(this->token) + "\",\"capabilities\":253,\"properties\":{\"os\":\"Windows\",\"browser\":\"Chrome\",\"device\":\"\",\"system_locale\":\"en-US\",\"browser_user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36\",\"browser_version\":\"96.0.4664.45\",\"os_version\":\"10\",\"referrer\":\"\",\"referring_domain\":\"\",\"referrer_current\":\"\",\"referring_domain_current\":\"\",\"release_channel\":\"stable\",\"client_build_number\":108924,\"client_event_source\":null},\"compress\":false,\"client_state\":{\"guild_hashes\":{},\"highest_lastmessage_id\":\"0\",\"read_state_version\":0,\"user_guild_settings_version\":-1,\"user_settings_version\":-1}}}", websocketpp::frame::opcode::text);
+        if (bot) c->send(hdl, "{\"op\":2,\"d\":{\"token\":\"" + std::string(this->token) + "\", \"intents\":32767, \"properties\":{\"$os\": \"linux\", \"$browser\":\"discord++\", \"$device\":\"discord++\"}}}", websocketpp::frame::opcode::text);
+        else    c->send(hdl, "{\"op\":2,\"d\":{\"token\":\"" + std::string(this->token) + "\",\"capabilities\":253,\"properties\":{\"os\":\"Windows\",\"browser\":\"Chrome\",\"device\":\"\",\"system_locale\":\"en-US\",\"browser_user_agent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36\",\"browser_version\":\"96.0.4664.45\",\"os_version\":\"10\",\"referrer\":\"\",\"referring_domain\":\"\",\"referrer_current\":\"\",\"referring_domain_current\":\"\",\"release_channel\":\"stable\",\"client_build_number\":108924,\"client_event_source\":null},\"compress\":false,\"client_state\":{\"guild_hashes\":{},\"highest_lastmessage_id\":\"0\",\"read_state_version\":0,\"user_guild_settings_version\":-1,\"user_settings_version\":-1}}}", websocketpp::frame::opcode::text);
         _msg.hdl = hdl;
         _msg.c = c;
         this->connected = true;
     }
 
-    void discord::start(const char* token, bool bot)
+    void discord::start(const char* token, bool bot, void(*on_invalid)(discord* _disc), void(*on_msg)(client::message msg), void(*on_login)(client client))
     {
-        threadClient = std::thread([=]() 
-        {
-            /*this->emb.color = "16758465";
-            this->emb.image = "https://media.discordapp.net/attachments/771831923563298847/829894508426035210/619-6197837_kannakamui-cute-loli-dragon-purple-anime-misskobayashid-kunna.png?width=628&height=630";
-            this->emb.title = "hello!";*/
-            this->bot = bot;
-            this->token = token;
+        this->on_invalid = on_invalid;
+        this->on_login = on_login;
+        this->on_msg = on_msg;
+        threadClient = std::thread([=]()
+            {
+                this->bot = bot;
+                this->token = token;
 
-            if(bot == true) 
-                 headers.emplace("Authorization", "Bot " + std::string(token));
-            else headers.emplace("Authorization", token);
-            
-            headers.emplace("User-Agent", "Discord");
-    
-            c.set_tls_init_handler (
-                [this](websocketpp::connection_hdl) 
+                if (bot == true)
+                    headers.emplace("Authorization", "Bot " + std::string(token));
+                else headers.emplace("Authorization", token);
+
+                headers.emplace("User-Agent", "Discord");
+
+                c.set_tls_init_handler(
+                    [this](websocketpp::connection_hdl)
+                    {
+                        return websocketpp::lib::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tlsv1);
+                    }
+                );
+
+                try {
+                    c.init_asio();
+                    //c.set_fail_handler   (std::bind(&discord::on_fail,    this, &c, ::_1, this));
+                    c.set_access_channels(websocketpp::log::alevel::none);
+                    c.set_message_handler(std::bind(&discord::on_message, this, &c, ::_1, ::_2)); //set event handlers, on_close and on_error are also possible.
+                    c.set_open_handler(std::bind(&discord::on_open, this, &c, ::_1));
+                    c.set_close_handler(std::bind(&discord::on_close, this, &c, ::_1, this));
+
+                    websocketpp::lib::error_code ec;
+                    clientpp::connection_ptr con = c.get_connection(uri, ec);
+                    if (ec) {
+                        std::cout << "could not create connection because: " << ec.message() << std::endl;
+                        return;
+                    }
+                    c.connect(con);
+                    this->initialised = true;
+                    c.run();
+                }
+
+                catch (nlohmann::json::exception& e)
                 {
-                    return websocketpp::lib::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tlsv1);
+                    MessageBoxA(nullptr, e.what(), nullptr, MB_OK);
                 }
-            );
-    
-            try {
-                c.init_asio();
-                c.set_access_channels(websocketpp::log::alevel::none);
-                c.set_message_handler(std::bind(&discord::on_message, this, &c, ::_1, ::_2)); //set event handlers, on_close and on_error are also possible.
-                c.set_open_handler   (std::bind(&discord::on_open,    this, &c, ::_1));
-                c.set_fail_handler   (std::bind(&discord::on_fail,    this, &c, ::_1, this));
-                c.set_close_handler  (std::bind(&discord::on_close,   this, &c, ::_1, this));
-
-                websocketpp::lib::error_code ec;
-                clientpp::connection_ptr con = c.get_connection(uri, ec);
-                if (ec) {
-                    std::cout << "could not create connection because: " << ec.message() << std::endl;
-                    return;
+                catch (websocketpp::exception const& e)
+                {
+                    MessageBoxA(nullptr, e.what(), nullptr, MB_OK);
                 }
-                c.connect(con);
-                this->initialised = true;
-                c.run();
-            }
+                catch (...)
+                {
+                    MessageBoxA(nullptr, "unknown", nullptr, MB_OK);
+                }
 
-            catch (nlohmann::json::exception& e)
-            {
-                MessageBoxA(nullptr, e.what(), nullptr, MB_OK);
-            }
-            catch (websocketpp::exception const& e) 
-            {
-                MessageBoxA(nullptr, e.what(), nullptr, MB_OK);
-            }
-            catch (...) 
-            {
-                MessageBoxA(nullptr, "unknown", nullptr, MB_OK);
-            }
-
-        });
-        threadClient.join();
+            });
+        threadClient.detach();
 
     }
 
@@ -188,17 +172,22 @@ namespace Discord
         // nothing yet 
     }
 
-    void discord::get_user(std::string id)
+    bool discord::get_user(std::string id)
     {
         httplib::SSLClient cli("discord.com");
         std::string url = "https://discord.com/api/v9/users/" + id;
         auto res = cli.Get(url.c_str(), headers);
         nlohmann::json t = nlohmann::json::parse(res->body);
+        fetched.response = res->body;
+        if (contains(res->body, "error")) return false;
         fetched.id = t["id"].get<std::string>();
         fetched.username = t["username"].get<std::string>();
         fetched.discriminator = t["discriminator"].get<std::string>();
         fetched.avatar = t["avatar"].get<std::string>();
+        fetched.profile_url = std::string("https://cdn.discordapp.com/avatars/" + fetched.id + "/" + fetched.avatar + ".webp?size=160");
         cli.stop();
+
+        return true;
     }
 
     void discord::ban_user(client::message* msg, std::string id)
@@ -208,17 +197,6 @@ namespace Discord
         auto res = cli.Put(url.c_str(), headers, "{\"deletemessage_days\": \"1\"}", "application/json");
         cli.stop();
     }
-
-    /*
-    void discord::sendmessage(std::string channelid, std::string message)
-    {
-        httplib::SSLClient cli("discord.com");
-        std::string url = "https://discord.com/api/v9/channels/" + channelid + "/messages";
-        nlohmann::json t;
-        t["content"] = message;
-        auto res = cli.Post(url.c_str(), this->headers, t.dump(), "application/json");
-        cli.stop();
-    }*/
 
     void discord::del_message(std::string channelid, std::string messageid)
     {
@@ -236,41 +214,6 @@ namespace Discord
         cli.stop();
     }
 
-    /*
-    void discord::onmessage(std::string channel, std::string message)
-    {
-        httplib::SSLClient cli("discord.com");
-        std::string url = "https://discord.com/api/v9/channels/" + channel + "/messages";
-        nlohmann::json t;
-        t["content"] = message;
-        auto res = cli.Post(url.c_str(), this->headers, t.dump(), "application/json");
-        cli.stop();
-    }
-
-    void discord::respond(client::message* msg, std::string message)
-    {
-        httplib::SSLClient cli("discord.com");
-        std::string url = "https://discord.com/api/v9/channels/" + msg->channelid + "/messages";
-        nlohmann::json t;
-        t["content"] = message;
-        auto res = cli.Post(url.c_str(), headers, t.dump(), "application/json");
-        cli.stop();
-    }*/
-
-    /*
-    void discord::send_embed(std::string channel, std::string message)
-    {
-        httplib::SSLClient cli("discord.com");
-        std::string url = "https://discord.com/api/v8/channels/" + channel + "/messages";
-        nlohmann::json t;
-        t["embed"]["description"] = message;
-        t["embed"]["color"] = this->emb.color;
-        t["embed"]["title"] = this->emb.title;
-        t["embed"]["thumbnail"]["url"] = this->emb.image;
-        auto res = cli.Post(url.c_str(), this->headers, t.dump(), "application/json");
-        cli.stop();
-    }*/
-
     void client::message::respond(client::message* msg, std::string message)
     {
         httplib::SSLClient cli("discord.com");
@@ -279,5 +222,12 @@ namespace Discord
         t["content"] = message;
         auto res = cli.Post(url.c_str(), headers, t.dump(), "application/json");
         cli.stop();
+    }
+
+    void client::message::command(std::string command, void(*func)(client::message msg))
+    {
+        if (content.starts_with(prefix) && contains(this, command)) {
+            func(*this);
+        }
     }
 }

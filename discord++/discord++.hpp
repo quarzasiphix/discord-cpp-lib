@@ -1,20 +1,26 @@
 #pragma once
+#include <websocketpp/config/asio_client.hpp>
+#include <websocketpp/client.hpp>
+#include <websocketpp/transport/asio/security/tls.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/function.hpp>
-#include "include/websocketpp/config/asio_client.hpp"
-#include "include/websocketpp/client.hpp"
-#include "include/websocketpp/transport/asio/security/tls.hpp"
-#include "include/nlohmann/json.hpp"
+#include <nlohmann/json.hpp>
+
 #include "functional"
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 
-#include "include/httplib.h"
+#include <httplib.h>
 #define _WINSOCK2API_
 #define _WINSOCKAPI_   /* Prevent inclusion of winsock.h in windows.h */
 
+#pragma comment(lib, "libs/libboost_date_time-vc142-mt-s-x64-1_76.lib")
+#pragma comment(lib, "libs/libboost_random-vc142-mt-s-x64-1_76.lib")
+#pragma comment(lib, "libs/libcurl_a.lib")
+#pragma comment(lib, "libs/libssl.lib")
+
 #include <thread>
 #include <vector>
-#include <iostream>
+
 
 typedef websocketpp::config::asio_client::message_type::ptr message_ptr;
 
@@ -24,7 +30,7 @@ using websocketpp::lib::bind;
 
 namespace Discord
 {
-    #define clientpp websocketpp::client<websocketpp::config::asio_tls_client>
+#define clientpp websocketpp::client<websocketpp::config::asio_tls_client>
 
     struct client
     {
@@ -48,8 +54,12 @@ namespace Discord
 
             void respond(client::message* msg, std::string message);
 
+            void command(std::string command, void(*func)(client::message msg));
+
             std::vector<std::string> param;
             char prefix = '!';
+
+            friend struct discord;
         };
 
         message msg;
@@ -77,10 +87,14 @@ namespace Discord
 
     struct fetched_user
     {
+        bool is_valid;
         std::string id;
         std::string username;
         std::string discriminator;
         std::string avatar;
+        std::string profile_url;
+
+        std::string response;
     };
 
     class discord
@@ -88,7 +102,7 @@ namespace Discord
         void on_message(clientpp* c, websocketpp::connection_hdl hdl, message_ptr msg);
         void on_close(clientpp* c, websocketpp::connection_hdl hdl, discord* _disc);
         void on_open(clientpp* c, websocketpp::connection_hdl hdl);
-        void on_fail(clientpp* c, websocketpp::connection_hdl hdl, discord* _disc);
+        //void on_fail(clientpp* c, websocketpp::connection_hdl hdl, discord* _disc);
         clientpp c;
     public:
         const char* token;
@@ -108,9 +122,9 @@ namespace Discord
 
         void del_message(client::message* msg, std::string messageid);
         void del_message(std::string channelid, std::string messageid);
-        void get_user(std::string id);
+        bool get_user(std::string id);
         void ban_user(client::message* msg, std::string id);
-        void start(const char* token, bool bot);
+        void start(const char* token, bool bot, void(*on_invalid)(discord* _disc), void(*on_msg)(client::message msg), void(*on_login)(client client));
         ~discord();
         std::thread threadClient;
         socket_msg _msg;
