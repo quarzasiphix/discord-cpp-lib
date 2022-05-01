@@ -17,7 +17,6 @@ currently in a very early release stage
 Included example: 
 ```c++
 #include "../discord++/discord++.hpp"
-#include <iostream>
 
 using namespace Discord;
 
@@ -32,42 +31,45 @@ void on_invalid(discord* _discord)
 	std::cin.get();
 }
 
-bool prefix(client::message& msg)
-{
-	if (msg.content[0] == msg.prefix)
-	{
-		if (msg.param[0].starts_with(msg.prefix))
-			msg.param[0].replace(0, 1, "");
-		return true;
-	}
-	else return false;
-}
-
 void on_msg(client::message msg)
 {
-	if (prefix(msg) == false) return;
-	// Example, typing !ping in any chat will call this function \/
-	if (prefix(msg) == true && msg.param[0] == "ping") {
-		msg.respond(&msg, "pong");
-		std::cout << "pinged!" << std::endl;
-	}
-	// typing !pong in chat will call this functino \/
-	if (prefix(msg) == true && msg.param[0] == "pong") {
+
+	msg.command("test", [](client::message msg) {
+		msg.respond(&msg, "received test");
+		std::cout << "received test" << std::endl;
+	});
+
+	msg.command("pong", [](client::message msg) {
 		msg.respond(&msg, "ping");
-		std::cout << "ponged!" << std::endl;
-	}
+		std::cout << "received pong" << std::endl;
+	});
+
+	msg.command("ping", [](client::message msg) {
+		msg.respond(&msg, "pong");
+		std::cout << "received ping" << std::endl;
+	});
+
+	msg.command("user", [](client::message msg) {
+		discord disc;
+		if (disc.get_user(msg.param[1]))
+			msg.respond(&msg, std::string("```"
+				"name: " + disc.fetched.username + "#" + disc.fetched.discriminator + "\n" +
+				"id: " + disc.fetched.id + "\n" + "```" +
+				disc.fetched.profile_url + "\n"
+			));
+		else msg.respond(&msg, "```invalid id```");
+	});
 }
 
 int main()
 {
-	const char* token = "token";
+	const char* sbtoken = "token";
 
-	discord bot;
-	bot.on_invalid = on_invalid;
-	bot.on_login = on_login;
-	bot.on_msg = on_msg;
+	discord sbot;
+	sbot.start(sbtoken, false, on_invalid, on_msg, on_login);
 
-	bot.start(token, true);
+	std::cout << "press enter to stop client" << std::endl;
+	std::cin.get();
 }
 ```
   
