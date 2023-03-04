@@ -1,5 +1,6 @@
 # Discord bot library in c++
-currently in a very early release stage
+
+Early build, made entirely from scratch using sockets and curl
 ---
 ### Libraries used: 
   - [Websocketpp](https://github.com/zaphoyd/websocketpp)
