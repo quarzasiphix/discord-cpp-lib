@@ -14,7 +14,7 @@ currently in a very early release stage
   - precompiled X64, release libraries of Boost and Curl are already included in the project files ```discord++/libs```
      
     
-Included example: 
+my example: 
 ```c++
 #include "../discord++/discord++.hpp"
 
