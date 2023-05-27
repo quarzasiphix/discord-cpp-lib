@@ -1,5 +1,6 @@
 # Discord bot library in c++
-
+<h3> (currently broken) </h3>
+ 
 Early build, made entirely from scratch using sockets and curl
 ---
 ### Libraries used: 
